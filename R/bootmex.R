@@ -100,7 +100,7 @@
 #' @export bootmex
 bootmex <-
     # Bootstrap inference for a conditional multivaratiate extremes model.
-function (x, R = 100, nPass = 3, trace = 10,referenceMargin=NULL) {
+function (x, R = 100, nPass = 3, trace = 10,referenceMargin=NULL, fixed_b = FALSE) {
     theCall <- match.call()
     if (!inherits(x, "mex")){
       stop("object must be of type 'mex'")
@@ -164,7 +164,7 @@ function (x, R = 100, nPass = 3, trace = 10,referenceMargin=NULL) {
         ggpd <- migpd(g, mth = mar$mth,
                       penalty = penalty, priorParameters = priorParameters)
 
-        gd <- mexDependence(ggpd, dqu = dqu, which = which, margins=margins[[1]], constrain=constrain, v=v, start=start,referenceMargin=referenceMargin)
+        gd <- mexDependence(ggpd, dqu = dqu, which = which, margins=margins[[1]], constrain=constrain, v=v, start=start,referenceMargin=referenceMargin, fixed_b = fixed_b)
         res <- list(GPD = coef(ggpd)[3:4, ],
                     dependence = gd$dependence$coefficients,
                     Z = gd$dependence$Z,

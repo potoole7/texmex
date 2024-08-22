@@ -172,13 +172,15 @@
     function (x, which, dqu, margins = "laplace",
               constrain=TRUE, v = 10, maxit=1000000,
               start=c(.01, .01), marTransform="mixture",
+              fixed_b = FALSE,
+              # start=c(.01), marTransform="mixture",
               referenceMargin=NULL, nOptim = 1,
               PlotLikDo=FALSE, PlotLikRange=list(a=c(-1,1),b=c(-3,1)),
               PlotLikTitle=NULL){
    theCall <- match.call()
    if (!inherits(x, "migpd"))
        stop("you need to use an object created by migpd")
-
+   
    margins <- list(casefold(margins),
                    p2q = switch(casefold(margins),
                                 "gumbel" = function(p)-log(-log(p)),
@@ -189,7 +191,8 @@
 
    x <- mexTransform(x, margins = margins, method = marTransform, r=referenceMargin)
    x$referenceMargin <- referenceMargin
-
+   
+   
    if (margins[[1]] == "gumbel" & constrain){
      warning("With Gumbel margins, you can't constrain, setting constrain=FALSE")
      constrain <- FALSE
@@ -225,29 +228,56 @@
 
    if( length(start) == 2 ){
      start <- matrix(rep(start,length(dependent)),nrow=2)
+     if (fixed_b == TRUE) {
+       b <- unique(start[2, ])
+       start <- start[1, , drop = FALSE]
+     }
    }
 
-   if( length(start) != 2*length(dependent)){
-     stop("start should be of type 'mex' or be a vector of length 2, or be a matrix with 2 rows and ncol equal to the number of dependence models to be estimated")
-   }
+   # if( length(start) != 2*length(dependent)){
+   #   stop("start should be of type 'mex' or be a vector of length 2, or be a matrix with 2 rows and ncol equal to the number of dependence models to be estimated")
+   # }
 
    if( ! missing(PlotLikRange) ){
      PlotLikDo <- TRUE
    }
 
-   qfun <- function(X, yex, wh, aLow, margins, constrain, v, maxit, start){
-     Qpos <- function(param, yex, ydep, constrain, v, aLow) {
+   qfun <- function(X, yex, wh, aLow, margins, constrain, v, maxit, start, fixed_b){
+     if (fixed_b) {
+       Qpos <- function(param, yex, ydep, constrain, v, aLow, b) {
+  
+  	     a <- param[1]
+         # b <- param[2]
+  	     
+  	     # for debugging
+         # ydep = X[wh]
+         # yex1 <- yex[wh]
+         # a <- 0
+         # PosGumb.Laplace.negProfileLogLik(yex1, ydep, a, b, constrain, v, aLow) # defined in file mexDependenceLowLevelFunctions
 
-  	   a <- param[1]
-       b <- param[2]
-
-       res <- PosGumb.Laplace.negProfileLogLik(yex, ydep, a, b, constrain, v, aLow) # defined in file mexDependenceLowLevelFunctions
-       res$profLik
-     } # Close Qpos <- function
-
-     o <- try(optim(par=start, fn=Qpos,
+         res <- PosGumb.Laplace.negProfileLogLik(yex, ydep, a, b, constrain, v, aLow) # defined in file mexDependenceLowLevelFunctions
+         res$profLik
+       } # Close Qpos <- function
+       o <- try(optim(par=start, fn=Qpos, method = "Brent", lower = -1, upper = 1, # 1D optimisation
+                      control=list(maxit=maxit),
+                      yex = yex[wh], ydep = X[wh], constrain=constrain, v=v, aLow=aLow, b=b), silent=TRUE)
+       # o1 <- try(optimise(f = Qpos, interval = c(-1, 1), 
+       #                   maximum = FALSE, tol = .Machine$double.eps^0.25,
+       #                   yex = yex[wh], ydep = X[wh], constrain=constrain, v=v, aLow=aLow, b=b))
+     } else {
+       Qpos <- function(param, yex, ydep, constrain, v, aLow) {
+         
+         a <- param[1]
+         b <- param[2]
+         
+         # TODO: Investigate NAs in yex?
+         res <- PosGumb.Laplace.negProfileLogLik(yex, ydep, a, b, constrain, v, aLow) # defined in file mexDependenceLowLevelFunctions
+         res$profLik
+       }
+       o <- try(optim(par=start, fn=Qpos,
               control=list(maxit=maxit),
               yex = yex[wh], ydep = X[wh], constrain=constrain, v=v, aLow=aLow), silent=TRUE)
+     }
 
      if (inherits(o, "try-error")){
         warning("Error in optim call from mexDependence")
@@ -262,9 +292,16 @@
      } else if(nOptim > 1) {
 
         for( i in 2:nOptim ){
-           o <- try(optim(par=o$par, fn=Qpos,
-                    control=list(maxit=maxit),
-                    yex = yex[wh], ydep = X[wh], constrain=constrain, v=v, aLow=aLow), silent=TRUE)
+           if (fixed_b == TRUE) {
+             o <- try(optim(par=o$par, fn=Qpos, method = "Brent", lower = -1, upper = 1, # 1D optimisation
+                       control=list(maxit=maxit),
+                       yex = yex[wh], ydep = X[wh], constrain=constrain, v=v, aLow=aLow, b=b), silent=TRUE)
+           } else {
+             o <- try(optim(par=o$par, fn=Qpos,
+                      control=list(maxit=maxit),
+                      yex = yex[wh], ydep = X[wh], constrain=constrain, v=v, aLow=aLow), silent=TRUE)
+             
+           }
            if (inherits(o, "try-error")){
              warning("Error in optim call from mexDependence")
              o <- as.list(o)
@@ -283,6 +320,7 @@
      if ( PlotLikDo ){# plot profile likelihood for (a,b)
        nGridPlotLik <- 50
        a.grid <- seq(PlotLikRange$a[1],PlotLikRange$a[2],length=nGridPlotLik)
+       # b.grid <- seq(PlotLikRange$b[1],PlotLikRange$b[2],length=nGridPlotLik)
        b.grid <- seq(PlotLikRange$b[1],PlotLikRange$b[2],length=nGridPlotLik)
        NegProfLik <- matrix(0,nrow=nGridPlotLik,ncol=nGridPlotLik)
        for(i in 1:nGridPlotLik){
@@ -337,13 +375,23 @@
    yex <- c(x$transformed[, which])
    wh <- yex > unique(dth)
 
-   res <- sapply(1:length(dependent),
-                 function(X,dat,yex,wh,aLow,margins,constrain,v,maxit,start)qfun(dat[,X],yex,wh,aLow,margins,constrain,v,maxit,start[,X]),
-                 dat=as.matrix(x$transformed[, dependent]), yex=yex, wh=wh, aLow=aLow, margins=margins[[1]],
-                 constrain=constrain, v=v, maxit=maxit, start=start)
-
+   res <- sapply(
+     1:length(dependent),
+     \(X, dat, yex, wh, aLow, margins, constrain, v, maxit, start)
+     qfun(
+       dat[, X], yex, wh, aLow, margins, constrain, v, 
+       maxit, start[, X], fixed_b
+     ), 
+     dat = as.matrix(x$transformed[, dependent]), 
+     yex = yex, wh = wh, aLow = aLow, margins = margins[[1]],
+     constrain = constrain, v = v, maxit = maxit, start = start
+   )
+ 
    loglik <- -res[7,]
    res <- matrix(res[1:6,], nrow=6)
+   if (fixed_b == TRUE && all(is.na(res[2, ]))) {
+     res[2, ] <- b
+   }
 
    dimnames(res)[[1]] <- c(letters[1:4],"m","s")
    dimnames(res)[[2]] <- dimnames(x$transformed)[[2]][dependent]

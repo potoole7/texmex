@@ -49,7 +49,7 @@
 #' @export mexRangeFit
 mexRangeFit <-
 function (x, which, quantiles=seq(0.5,0.9,length=9), start=c(.01, .01), R=10, nPass=3, trace=10,
-          margins="laplace", constrain=TRUE, v=10, referenceMargin=NULL){
+          margins="laplace", constrain=TRUE, v=10, referenceMargin=NULL, fixed_b=FALSE){
   if (inherits(x, "mex")){
     if( (!missing(margins))){
       warning("margins given, but already specified in 'mex' object.  Using 'mex' value")
@@ -87,7 +87,7 @@ function (x, which, quantiles=seq(0.5,0.9,length=9), start=c(.01, .01), R=10, nP
                  which=which, x=x, margins = margins[[1]], start=start, constrain=constrain, v=v, referenceMargin=referenceMargin)
 
   boot <- lapply(ests, function(X, R, nPass, trace, ...)
-                                bootmex(x=X, R=R, nPass=nPass, trace=trace, referenceMargin=referenceMargin),
+                                bootmex(x=X, R=R, nPass=nPass, trace=trace, referenceMargin=referenceMargin, fixed_b=fixed_b),
                  R=R, nPass=nPass, trace=trace, referenceMargin=referenceMargin)
 
   res <- list(ests=ests,boot=boot,quantiles=quantiles)
