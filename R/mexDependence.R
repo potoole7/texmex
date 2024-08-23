@@ -396,6 +396,7 @@
    dimnames(res)[[1]] <- c(letters[1:4],"m","s")
    dimnames(res)[[2]] <- dimnames(x$transformed)[[2]][dependent]
    gdata <- as.matrix(x$transformed[wh, -which])
+   # calculate residuals
    tfun <- function(i, data, yex, a, b, cee, d) {
        data <- data[, i]
        a <- a[i]
@@ -411,6 +412,29 @@
            (data - a)/(yex^b)
        }
    }
+   
+   # calculate regression line 
+   regfun <- \(i, data, yex, a, b, cee, d, z) {
+     data <- data[i, ]
+     a <- a[i]
+     b <- b[i]
+     cee <- cee[i]
+     d <- d[i]
+     z <- z[, i]
+     
+     if (is.na(a)) {
+       repl(NA, length(data))
+     } else {
+       if (a < 10^(-5) & b < 0)
+         a <- cee - d * log(yex)
+       else a <- a * yex
+     }
+     
+     # calculate regression equation for conditional extremes model
+     a + (yex ^ b) * z
+   }
+   
+   # residuals
    z <- try(sapply(1:(dim(gdata)[[2]]), tfun, data = gdata,
        yex = yex[wh], a = res[1, ], b = res[2, ], cee = res[3, ], d = res[4, ]))
    if (inherits(z, c("Error", "try-error"))) {
@@ -420,9 +444,41 @@
        z <- matrix(nrow = 0, ncol = dim(x$data)[[2]] - 1)
    }
    dimnames(z) <- list(NULL,dimnames(x$transformed)[[2]][dependent])
+   
+   # regression equation (Y_{-i} = alpha_i * Y_i + (Y_i)^beta * Z_i)
+   regline <- try(sapply(1:(dim(gdata)[[2]]), regfun, data = gdata,
+       yex = yex[wh], a = res[1, ], b = res[2, ], cee = res[3, ], d = res[4, ],
+       z = z))
+   
+   # if (inherits(z, c("Error", "try-error"))) {
+   #     z <- matrix(nrow = 0, ncol = dim(x$data)[[2]] - 1)
+   # }
+   # else if (!is.array(z)) {
+   #     z <- matrix(nrow = 0, ncol = dim(x$data)[[2]] - 1)
+   # }
+   # dimnames(z) <- list(NULL,dimnames(x$transformed)[[2]][dependent])
+   cleanup <- \(vec) {
+     if (inherits(z, c("Error", "try-error"))) {
+         vec <- matrix(nrow = 0, ncol = dim(x$data)[[2]] - 1)
+     }
+     else if (!is.array(vec)) {
+         vec <- matrix(nrow = 0, ncol = dim(x$data)[[2]] - 1)
+     }
+     dimnames(vec) <- list(NULL,dimnames(x$transformed)[[2]][dependent])
+     return(vec)
+   }
+   z <- cleanup(z)
+   regline <- cleanup(regline)
+    
+   
+#    res2 <- list(coefficients = res, Z = z, dth = unique(dth),
+#                dqu = unique(dqu), which = which, conditioningVariable= colnames(x$data)[which],
+# 	             loglik=loglik, margins=margins, constrain=constrain, v=v)
    res2 <- list(coefficients = res, Z = z, dth = unique(dth),
                dqu = unique(dqu), which = which, conditioningVariable= colnames(x$data)[which],
-	             loglik=loglik, margins=margins, constrain=constrain, v=v)
+	             loglik=loglik, margins=margins, constrain=constrain, v=v, 
+               # also return objects required for calculating regression line
+               regline=regline)
    oldClass(res2) <- "mexDependence"
 
    output <- list(margins=x, dependence=res2, call=theCall)
