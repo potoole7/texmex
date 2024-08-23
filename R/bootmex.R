@@ -98,15 +98,22 @@
 #' plot(myboot,plots="dependence")
 #' }
 #' @export bootmex
-bootmex <-
-    # Bootstrap inference for a conditional multivaratiate extremes model.
-function (x, R = 100, nPass = 3, trace = 10,referenceMargin=NULL, fixed_b = FALSE) {
+# Bootstrap inference for a conditional multivaratiate extremes model.
+bootmex <- \(
+  x, 
+  R = 100, 
+  nPass = 3, 
+  trace = 10, 
+  referenceMargin = NULL, 
+  fixed_b = FALSE # , 
+  # fixed_margins = FALSE # don't bootstrap marginal parameter values, only dep
+  ) {
     theCall <- match.call()
     if (!inherits(x, "mex")){
       stop("object must be of type 'mex'")
     }
-
-# Construct the object to be returned.
+    
+    # Construct the object to be returned.
     ans <- list()
     ans$call <- theCall
 
@@ -127,6 +134,7 @@ function (x, R = 100, nPass = 3, trace = 10,referenceMargin=NULL, fixed_b = FALS
     penalty <- mar$penalty
     priorParameters <- mar$priorParameters
     start <- 0.75* coef(x)$dependence[1:2,] # scale back towards zero in case point est on edge of original parameter space and falls off edge of constrained space for bootstrap sample
+    if (fixed_b == TRUE) start[2] <- coef(x)$dependence[2, ]
 
     n <- dim(mar$transformed)[[1]]
     d <- dim(mar$transformed)[[2]]
@@ -153,16 +161,38 @@ function (x, R = 100, nPass = 3, trace = 10,referenceMargin=NULL, fixed_b = FALS
             u <- runif(nrow(g))
             g[order(g[, j]), j] <- sort(margins$p2q(u))
           }
-          if (sum(g[, which] > dth) > 1  &   all(g[g[,which] > dth , which] > 0)){ ok <- TRUE }
+          if (sum(g[, which] > dth) > 1  &  all(g[g[,which] > dth , which] > 0)){ ok <- TRUE }
         }
 
         g <- sapply(1:d, getTran, x = g, data = mar$data, margins=margins,
                     mod = mar$models, th = mar$mth, qu = mar$mqu)
 
         dimnames(g)[[2]] <- names(mar$models)
+        
+        # test for no exceedances over sampled points, if so resample w/ nPass
+        max_vals <- apply(g, 2, max, na.rm = TRUE)
+        if (!all(max_vals > mar$mth)) {
+          return(list(NA))
+        }
 
-        ggpd <- migpd(g, mth = mar$mth,
-                      penalty = penalty, priorParameters = priorParameters)
+        # if fixing margins, only use supplied marginal parameters
+        # if (fixed_margins == TRUE) {
+        #   ggpd <- x$margins
+        # } else {
+          ggpd <- migpd(g, mth = mar$mth,
+                        penalty = penalty, priorParameters = priorParameters)
+          # ggpd <- tryCatch({
+          #   migpd(
+          #     g, 
+          #     mth = mar$mth, 
+          #     penalty = penalty, 
+          #     priorParameters = priorParameters
+          #   )
+          # }, error = function(e) {
+          #   message(print(e))
+          #   # browser()
+          # })
+        # }
 
         gd <- mexDependence(ggpd, dqu = dqu, which = which, margins=margins[[1]], constrain=constrain, v=v, start=start,referenceMargin=referenceMargin, fixed_b = fixed_b)
         res <- list(GPD = coef(ggpd)[3:4, ],
@@ -177,6 +207,8 @@ function (x, R = 100, nPass = 3, trace = 10,referenceMargin=NULL, fixed_b = FALS
         }
         res
     } # Close innerFun
+    
+    # browser()
 
     res <- lapply(1:R, innerFun, x = x, which = which, dth = dth, margins=margins,
         dqu = dqu, penalty = penalty, priorParameters = priorParameters, constrain=constrain, v=v, start=start,
