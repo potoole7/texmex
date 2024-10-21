@@ -331,8 +331,18 @@
        }
        NegProfLik[NegProfLik > 10^10] <- NA
        if(sum(!is.na(NegProfLik))){
-          filled.contour(a.grid,b.grid,-NegProfLik,main=paste("Profile likelihood",PlotLikTitle),color.palette = terrain.colors,
-                         xlab="a",ylab="b",plot.axes={ axis(1); axis(2); points(o$par[1],o$par[2]) })
+          # filled.contour(a.grid,b.grid,-NegProfLik,main=paste("Profile likelihood",PlotLikTitle),color.palette = terrain.colors,
+          par(mar = c(5, 5, 5, 5))  # Adjust the margins as needed
+          filled.contour(
+            a.grid,
+            b.grid,
+            -NegProfLik,
+            main=PlotLikTitle,
+            color.palette = terrain.colors,
+            xlab="a",
+            ylab="b",
+            plot.axes={ axis(1); axis(2); points(o$par[1],o$par[2]) }
+          )
        }
      }
 
@@ -423,7 +433,7 @@
      z <- z[, i]
      
      if (is.na(a)) {
-       repl(NA, length(data))
+       rep(NA, length(data))
      } else {
        if (a < 10^(-5) & b < 0)
          a <- cee - d * log(yex)

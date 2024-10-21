@@ -1,11 +1,12 @@
 ppevm <-
 function(object , nsim = 1000, alpha = .050){
+  
     object <- texmexStandardForm(object)
     # Want parameters as a matrix with one row for passing
     # into family$rng and so on
     a <- t(object$coefficients)
     u <- object$threshold
-    dat <- object$data$y
+    dat <- object$data$y 
 
     pfun <- object$family$prob
     rfun <- object$family$rng

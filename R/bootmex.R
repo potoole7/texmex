@@ -190,7 +190,6 @@ bootmex <- \(
           #   )
           # }, error = function(e) {
           #   message(print(e))
-          #   # browser()
           # })
         # }
 
@@ -208,8 +207,6 @@ bootmex <- \(
         res
     } # Close innerFun
     
-    # browser()
-
     res <- lapply(1:R, innerFun, x = x, which = which, dth = dth, margins=margins,
         dqu = dqu, penalty = penalty, priorParameters = priorParameters, constrain=constrain, v=v, start=start,
         pass = 1, trace = trace, getTran=getTran, n=n, d=d, dependent=dependent,referenceMargin=referenceMargin)

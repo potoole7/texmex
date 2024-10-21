@@ -36,7 +36,7 @@ ggplot.mex <- function(data=NULL, mapping,
    xq <- dep$margins$p2q(plotp) # Transform to Laplace or Gumbel scale
    
    plotfn <- function(i){
-
+        
        plots <- vector("list", length=3)
        dat <- data.frame(p=p,z=z[,i],absz = abs(z[,i] - mean(z[,i])))
        plots[[1]] <- ggplot(dat,aes(p,z)) + geom_point(colour=col,alpha=0.5) + 
@@ -48,17 +48,22 @@ ggplot.mex <- function(data=NULL, mapping,
            labs(x=paste("F(", dep$conditioningVariable,")", sep=""),
                 y=paste("|Z - mean(Z)|   ",colnames(z)[i]," | ",dep$conditioningVariable,sep="")) +
            geom_smooth(col=ptcol,fill=fill)       
-
+       
        dat <- data.frame(x=mar$data[, dep$which],
                          y = as.matrix(mar$data[, -dep$which])[, i])
        
        co <- coef(dep)[, i]
        zq <- quantile(dep$Z[, i], quantiles)
-       yq <- sapply(zq, function(z, co, xq){co["a"] * xq + co["c"] - co["d"]*log(xq) + xq^co["b"] * z}, xq, co=co)
+       # calculates regression lines from quantiles of residuals
+       yq <- sapply(zq, function(z, co, xq){
+         co["a"] * xq + co["c"] - co["d"]*log(xq) + xq^co["b"] * z
+        }, xq, co=co)
        
-       plots[[3]] <- ggplot(dat,aes(x,y)) + geom_point(col=col,alpha=0.5) + 
-           labs(x=dep$conditioningVariable, y=colnames(z)[i]) +
-           geom_vline(xintercept = depThr)
+       
+       plots[[3]] <- ggplot(dat,aes(x,y)) + 
+         geom_point(col=col,alpha=0.5) + 
+         labs(x=dep$conditioningVariable, y=colnames(z)[i]) +
+         geom_vline(xintercept = depThr)
 
        # add quantile contour lines
        if(is.null(mar$referenceMargin)){

@@ -13,7 +13,7 @@ function(data, mapping=NULL,
       }
     }
     
-    p <- lapply(1:length(data$models), function(i)ggplot(data$model[[i]], main= paste(rep(names(data$model[i]),4),main), xlab=xlab,nsim=nsim,alpha=0.05,plot.=FALSE,..., environment))
+    p <- lapply(1:length(data$models), function(i) ggplot(data$model[[i]], main= paste(rep(names(data$model[i]),4),main), xlab=xlab,nsim=nsim,alpha=0.05,plot.=FALSE,..., environment))
 
     invisible(p)
 }
