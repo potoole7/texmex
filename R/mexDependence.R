@@ -441,24 +441,26 @@
      }
      
      # calculate regression equation for conditional extremes model
-     a + (yex ^ b) * z
+     # Also return yex (and residuals) for use in plotting regression line
+     return(list(
+        "yex"     = yex, 
+        "regline" = a + (yex ^ b) * z,
+        "resid"   = z
+     ))
    }
    
    # residuals
-   z <- try(sapply(1:(dim(gdata)[[2]]), tfun, data = gdata,
-       yex = yex[wh], a = res[1, ], b = res[2, ], cee = res[3, ], d = res[4, ]))
-   if (inherits(z, c("Error", "try-error"))) {
-       z <- matrix(nrow = 0, ncol = dim(x$data)[[2]] - 1)
-   }
-   else if (!is.array(z)) {
-       z <- matrix(nrow = 0, ncol = dim(x$data)[[2]] - 1)
-   }
-   dimnames(z) <- list(NULL,dimnames(x$transformed)[[2]][dependent])
-   
-   # regression equation (Y_{-i} = alpha_i * Y_i + (Y_i)^beta * Z_i)
-   regline <- try(sapply(1:(dim(gdata)[[2]]), regfun, data = gdata,
-       yex = yex[wh], a = res[1, ], b = res[2, ], cee = res[3, ], d = res[4, ],
-       z = z))
+   z <- try(vapply(
+     1:(dim(gdata)[[2]]), 
+     tfun, 
+     data = gdata,
+     yex = yex[wh], 
+     a = res[1, ], 
+     b = res[2, ], 
+     cee = res[3, ], 
+     d = res[4, ], 
+     FUN.VALUE = numeric(length(yex[wh]))
+   ))
    
    # if (inherits(z, c("Error", "try-error"))) {
    #     z <- matrix(nrow = 0, ncol = dim(x$data)[[2]] - 1)
@@ -467,15 +469,45 @@
    #     z <- matrix(nrow = 0, ncol = dim(x$data)[[2]] - 1)
    # }
    # dimnames(z) <- list(NULL,dimnames(x$transformed)[[2]][dependent])
+   
+   # regression equation (Y_{-i} = alpha_i * Y_i + (Y_i)^beta * Z_i)
+   # regline <- try(sapply(1:(dim(gdata)[[2]]), regfun, data = gdata,
+   #     yex = yex[wh], a = res[1, ], b = res[2, ], cee = res[3, ], d = res[4, ],
+   #     z = z))
+   regline <- try(lapply(1:(dim(gdata)[[2]]), regfun, data = gdata,
+       yex = yex[wh], a = res[1, ], b = res[2, ], cee = res[3, ], d = res[4, ],
+       z = z))[[1]]
+ 
+   # TODO: Will have to be changed as regline no longer a vector, now list!
+   # cleanup <- \(vec) {
+   #   if (inherits(z, c("Error", "try-error"))) {
+   #       vec <- matrix(nrow = 0, ncol = dim(x$data)[[2]] - 1)
+   #   }
+   #   else if (!is.array(vec)) {
+   #       vec <- matrix(nrow = 0, ncol = dim(x$data)[[2]] - 1)
+   #   }
+   #   dimnames(vec) <- list(NULL,dimnames(x$transformed)[[2]][dependent])
+   #   return(vec)
+   # }
    cleanup <- \(vec) {
-     if (inherits(z, c("Error", "try-error"))) {
-         vec <- matrix(nrow = 0, ncol = dim(x$data)[[2]] - 1)
+     ret <- vec
+     if (is.list(ret)) {
+       ret <- matrix(vec$regline, ncol = 1)
      }
-     else if (!is.array(vec)) {
-         vec <- matrix(nrow = 0, ncol = dim(x$data)[[2]] - 1)
+     if (inherits(ret, c("Error", "try-error"))) {
+       ret <- matrix(nrow = 0, ncol = dim(x$data)[[2]] - 1)
      }
-     dimnames(vec) <- list(NULL,dimnames(x$transformed)[[2]][dependent])
-     return(vec)
+     else if (!is.array(ret)) {
+       ret <- matrix(nrow = 0, ncol = dim(x$data)[[2]] - 1)
+     }
+     dimnames(ret) <- list(NULL, dimnames(x$transformed)[[2]][dependent])
+     # add back in list elements
+     if (is.list(vec)) {
+       ret2 <- vec
+       ret2$regline <- as.vector(ret)
+       ret <- ret2
+     }
+     return(ret)
    }
    z <- cleanup(z)
    regline <- cleanup(regline)
