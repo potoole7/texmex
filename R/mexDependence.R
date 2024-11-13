@@ -433,7 +433,7 @@
      z <- z[, i]
      
      if (is.na(a)) {
-       rep(NA, length(data))
+       a <- rep(NA, length(data))
      } else {
        if (a < 10^(-5) & b < 0)
          a <- cee - d * log(yex)
