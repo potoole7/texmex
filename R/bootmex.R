@@ -116,25 +116,30 @@ bootmex <- \(
     # Construct the object to be returned.
     ans <- list()
     ans$call <- theCall
-
+    # function to transform from Gumbel/Laplace scale to original scale
     getTran <- function(i, x, data, mod, th, qu, margins) {
         param <- mod[[i]]$coefficients
         revTransform(margins$q2p(c(x[, i])), data = c(data[, i]), th = th[i],
                      qu = qu[i], sigma = exp(param[1]), xi = param[2])
     }
-
+    # pull out relevant parts of the mex object
     mar <- x$margins
     dep <- x$dependence
-    which <- dep$which
-    constrain <- dep$constrain
+    which <- dep$which # variable to condition on
+    constrain <- dep$constrain # Keef
     v <- dep$v
-    dqu <- dep$dqu
-    dth <- dep$dth
-    margins <- dep$margins
+    dqu <- dep$dqu # threshold quantile
+    dth <- dep$dth # threshold value
+    margins <- dep$margins # laplace quantile to percentile and vice vers funs
     penalty <- mar$penalty
     priorParameters <- mar$priorParameters
-    start <- 0.75* coef(x)$dependence[1:2,] # scale back towards zero in case point est on edge of original parameter space and falls off edge of constrained space for bootstrap sample
-    if (fixed_b == TRUE) start[2] <- coef(x)$dependence[2, ]
+    # scale back towards zero in case point est on edge of original parameter 
+    # space and falls off edge of constrained space for bootstrap sample
+    start <- 0.75* coef(x)$dependence[1:2, ] 
+    # set b to fixed value if specified
+    if (fixed_b == TRUE) {
+      start[2] <- coef(x)$dependence[2, ]
+    }
 
     n <- dim(mar$transformed)[[1]]
     d <- dim(mar$transformed)[[2]]
@@ -149,62 +154,77 @@ bootmex <- \(
     ans$margins <- margins
     ans$constrain <- constrain
 
-    innerFun <- function(i, x, which, dth, dqu, margins, penalty, priorParameters, constrain, v=v, start=start,
+    # TODO Step into this function
+    innerFun <- \(i, x, which, dth, dqu, margins, penalty, priorParameters, constrain, v=v, start=start,
         pass = 1, trace = trace, n=n, d=d, getTran=getTran, dependent=dependent,referenceMargin=referenceMargin) {
 
-        g <- sample(1:(dim(mar$transformed)[[1]]), size = n, replace = TRUE)
-        g <- mar$transformed[g, ]
-        ok <- FALSE
+      # mar$transformed is data on Laplace scale, 
+      g <- sample(1:(dim(mar$transformed)[[1]]), size = n, replace = TRUE)
+      # take bootstrap sample from Laplace scale
+      g <- mar$transformed[g, ]
+      ok <- FALSE
+      g1 <- g # TODO Temp, remove after
 
-        while (!ok) {
-          for (j in 1:(dim(g)[[2]])){
-            u <- runif(nrow(g))
-            g[order(g[, j]), j] <- sort(margins$p2q(u))
+      # TODO What does this part do?
+      # Reorder the bootstrap sample to have the same order as the original data
+      while (!ok) {
+        for (j in 1:(dim(g)[[2]])){ # loop across columns
+          # replace ordered Yi with ordered sample from standard Laplace CDF
+          u <- runif(nrow(g)) 
+          g[order(g[, j]), j] <- sort(margins$p2q(u))
+        }
+        # need positive exceedances in cond. var
+        if (sum(g[, which] > dth) > 1 && 
+            all(g[g[, which] > dth , which] > 0)) {
+          ok <- TRUE 
+        }
+      }
+      g2 <- g # TODO Temp, remove after
+
+      # convert each variable back to original scale
+      g <- sapply(1:d, getTran, x = g, data = mar$data, margins=margins,
+                  mod = mar$models, th = mar$mth, qu = mar$mqu)
+      # set dimnames
+      dimnames(g)[[2]] <- names(mar$models)
+      
+      # test for no exceedances over sampled points, if so resample w/ nPass
+      max_vals <- apply(g, 2, max, na.rm = TRUE)
+      if (!all(max_vals > mar$mth)) {
+        return(list(NA))
+      }
+
+      # if fixing margins, only use supplied marginal parameters
+      # if (fixed_margins == TRUE) {
+      #   ggpd <- x$margins
+      # } else {
+      # refit margins 
+      ggpd <- migpd(g, mth = mar$mth,
+                    penalty = penalty, priorParameters = priorParameters)
+        # ggpd <- tryCatch({
+        #   migpd(
+        #     g, 
+        #     mth = mar$mth, 
+        #     penalty = penalty, 
+        #     priorParameters = priorParameters
+        #   )
+        # }, error = function(e) {
+        #   message(print(e))
+        # })
+      # }
+
+      # refit dependence
+      gd <- mexDependence(ggpd, dqu = dqu, which = which, margins=margins[[1]], constrain=constrain, v=v, start=start,referenceMargin=referenceMargin, fixed_b = fixed_b)
+      res <- list(GPD = coef(ggpd)[3:4, ],
+                  dependence = gd$dependence$coefficients,
+                  Z = gd$dependence$Z,
+                  Y = g)
+
+      if (pass == 1) {
+          if (i%%trace == 0) {
+              message(paste(i, "replicates done\n"))
           }
-          if (sum(g[, which] > dth) > 1  &  all(g[g[,which] > dth , which] > 0)){ ok <- TRUE }
-        }
-
-        g <- sapply(1:d, getTran, x = g, data = mar$data, margins=margins,
-                    mod = mar$models, th = mar$mth, qu = mar$mqu)
-
-        dimnames(g)[[2]] <- names(mar$models)
-        
-        # test for no exceedances over sampled points, if so resample w/ nPass
-        max_vals <- apply(g, 2, max, na.rm = TRUE)
-        if (!all(max_vals > mar$mth)) {
-          return(list(NA))
-        }
-
-        # if fixing margins, only use supplied marginal parameters
-        # if (fixed_margins == TRUE) {
-        #   ggpd <- x$margins
-        # } else {
-          ggpd <- migpd(g, mth = mar$mth,
-                        penalty = penalty, priorParameters = priorParameters)
-          # ggpd <- tryCatch({
-          #   migpd(
-          #     g, 
-          #     mth = mar$mth, 
-          #     penalty = penalty, 
-          #     priorParameters = priorParameters
-          #   )
-          # }, error = function(e) {
-          #   message(print(e))
-          # })
-        # }
-
-        gd <- mexDependence(ggpd, dqu = dqu, which = which, margins=margins[[1]], constrain=constrain, v=v, start=start,referenceMargin=referenceMargin, fixed_b = fixed_b)
-        res <- list(GPD = coef(ggpd)[3:4, ],
-                    dependence = gd$dependence$coefficients,
-                    Z = gd$dependence$Z,
-                    Y = g)
-
-        if (pass == 1) {
-            if (i%%trace == 0) {
-                message(paste(i, "replicates done\n"))
-            }
-        }
-        res
+      }
+      res
     } # Close innerFun
     
     res <- lapply(1:R, innerFun, x = x, which = which, dth = dth, margins=margins,

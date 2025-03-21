@@ -510,7 +510,8 @@
      return(ret)
    }
    z <- cleanup(z)
-   regline <- cleanup(regline)
+   # TODO: Temp, fix for > 2 variables!
+   # regline <- cleanup(regline)
     
    
 #    res2 <- list(coefficients = res, Z = z, dth = unique(dth),
